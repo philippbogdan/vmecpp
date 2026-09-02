@@ -378,13 +378,17 @@ def build_response_table(
     case: QuasrCase, field: FieldSpec, nphi: int, work_dir: Path
 ) -> vmecpp.MagneticFieldResponseTable:
     work_dir.mkdir(parents=True, exist_ok=True)
+    # One file per process: concurrent jobs of the same case must not share it.
     coils_file = write_coils_file(
         case,
-        work_dir / f"coils.quasr{case.config_id:07d}_{field.name}",
+        work_dir / f"coils.quasr{case.config_id:07d}_{field.name}_{os.getpid()}",
         field.coil_points,
     )
     params = makegrid_parameters(case, field, nphi)
-    return vmecpp.MagneticFieldResponseTable.from_coils_file(coils_file, params)
+    try:
+        return vmecpp.MagneticFieldResponseTable.from_coils_file(coils_file, params)
+    finally:
+        coils_file.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
