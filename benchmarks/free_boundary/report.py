@@ -493,7 +493,7 @@ def _ladder_cases(df: pd.DataFrame) -> pd.DataFrame:
 
 def _ladder_panel(ax, df, levels, xvals, metric, xlabel, title, floor=True, ylog=True):
     sub = _ladder_cases(df)
-    sub = sub[sub["level"].isin(levels)]
+    sub = sub[sub["level"].isin(levels) & (sub["field"] == "f1280")]
     if sub.empty or metric not in sub:
         ax.axis("off")
         return False
@@ -1037,6 +1037,50 @@ def table_ladder(df: pd.DataFrame) -> str:
     return md_table(pd.DataFrame(rows), index=False)
 
 
+LADDERS = {
+    "Fourier (ns = 51)": ("m6", "m8", "m10", "m12"),
+    "radial (mpol = 8)": ("ns31", "m8", "ns71", "ns101"),
+    "tolerance (m8)": ("ftol8", "m8", "ftol11", "ftol13"),
+}
+
+
+def table_ladder_paired(df: pd.DataFrame) -> str:
+    """Per ladder, the cases that converged at every level of it, and the
+    median of each metric over that common subset at each level. Unlike the
+    per-level medians, these compare like with like."""
+    vac = _ladder_cases(df)
+    vac = vac[vac["field"] == "f1280"]
+    rows = []
+    for name, levels in LADDERS.items():
+        if not all(lv in set(vac["level"]) for lv in levels):
+            continue
+        ok = None
+        for lv in levels:
+            ids = set(vac.loc[(vac["level"] == lv) & vac["converged"], "case_id"])
+            ok = ids if ok is None else ok & ids
+        ok = ok or set()
+        for lv in levels:
+            s_lv = vac[(vac["level"] == lv) & vac["case_id"].isin(ok)]
+            rows.append(
+                {
+                    "ladder": name,
+                    "level": lv,
+                    "cases converged at every level": len(ok),
+                    "B.n RMS median": float(s_lv["bn_rms"].median())
+                    if len(s_lv)
+                    else np.nan,
+                    "B.n RMS max": float(s_lv["bn_rms"].max()) if len(s_lv) else np.nan,
+                    "fl dev RMS median [a]": float(s_lv["fl_dev_rms"].median())
+                    if len(s_lv)
+                    else np.nan,
+                    "iterations median": float(s_lv["itfsq_total"].median())
+                    if len(s_lv)
+                    else np.nan,
+                }
+            )
+    return md_table(pd.DataFrame(rows), index=False) if rows else ""
+
+
 def table_speed(df: pd.DataFrame) -> str:
     base = df[(df["level"] == "base") & df["converged"]]
     regimes = [r for r in REGIME_ORDER if r in set(base["regime"])]
@@ -1358,6 +1402,14 @@ def build_report(
         a("")
         a(table_ladder(df))
         a("")
+        paired = table_ladder_paired(df)
+        if paired:
+            a(
+                "Same ladders restricted to the cases that converged at every level (like against like):"
+            )
+            a("")
+            a(paired)
+            a("")
         if figures["ladders"]:
             a(f"![ladders]({figures['ladders']})")
             a("")
