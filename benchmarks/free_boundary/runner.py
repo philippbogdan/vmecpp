@@ -419,6 +419,68 @@ def _json_default(obj):
 
 
 # ---------------------------------------------------------------------------
+# Re-tracing field lines from stored boundaries
+# ---------------------------------------------------------------------------
+
+
+def retrace(
+    results_dir: Path,
+    *,
+    n_lines: int = 8,
+    n_turns: int = 100,
+    tol: float = 1e-9,
+    only_missing: bool = False,
+    cache_dir: Path | None = None,
+    log=print,
+) -> int:
+    """Recompute the field-line metrics of every converged free-boundary vacuum
+    record from its stored boundary, without re-running the solver.
+
+    Useful after a change to the tracing (or to trace more turns), and to make
+    the field-line columns of a ledger uniform. Rewrites ``results.jsonl``.
+    """
+    results_dir = Path(results_dir)
+    path = results_dir / "results.jsonl"
+    records = load_results(results_dir)
+    set_omp_threads(1)
+    fields: dict[int, object] = {}
+    n_done = 0
+    for rec in records:
+        if (
+            rec.get("regime") != "vacuum"
+            or not rec.get("converged")
+            or "lcfs" not in rec
+        ):
+            continue
+        if only_missing and np.isfinite(rec.get("fl_dev_rms", np.nan)):
+            continue
+        case_id = int(rec["case_id"])
+        if case_id not in fields:
+            fields[case_id] = metrics.exact_field(
+                case_lib.load_case(case_id, cache_dir)
+            )
+        rec.update(
+            metrics.fieldline_deviation(
+                fields[case_id],
+                metrics.lcfs_namespace(rec),
+                n_lines=n_lines,
+                n_turns=n_turns,
+                tol=tol,
+            )
+        )
+        n_done += 1
+        log(
+            f"retraced {rec['key']}: dev rms {rec['fl_dev_rms']:.2e} a, lost {rec['fl_lost_fraction']:.2f}"
+        )
+    tmp = path.with_suffix(".jsonl.tmp")
+    with open(tmp, "w") as f:
+        for rec in records:
+            f.write(json.dumps(rec, default=_json_default) + "\n")
+    tmp.replace(path)
+    return n_done
+
+
+# ---------------------------------------------------------------------------
 # Matrix driver
 # ---------------------------------------------------------------------------
 

@@ -24,6 +24,7 @@ that floor, so every accuracy number should be read next to it.
 from __future__ import annotations
 
 import time
+import types
 import typing
 
 import numpy as np
@@ -83,6 +84,23 @@ def lcfs_surface(
         if m > 0 or n > 0:
             surface.set_zs(m, n, float(zmns[i]))
     return surface
+
+
+def lcfs_namespace(record: dict) -> types.SimpleNamespace:
+    """A minimal wout-like object rebuilt from a ledger record's ``lcfs`` entry,
+    enough for every geometry function in this module."""
+    lcfs = record["lcfs"]
+    return types.SimpleNamespace(
+        nfp=int(record["nfp"]),
+        Aminor_p=float(record["Aminor_p"]),
+        Rmajor_p=float(record["Rmajor_p"]),
+        xm=np.asarray(lcfs["xm"], dtype=int),
+        xn=np.asarray(lcfs["xn"], dtype=int),
+        rmnc=np.asarray(lcfs["rmnc"], dtype=float)[:, None],
+        zmns=np.asarray(lcfs["zmns"], dtype=float)[:, None],
+        raxis_cc=np.asarray(lcfs["raxis_cc"], dtype=float),
+        zaxis_cs=np.asarray(lcfs["zaxis_cs"], dtype=float),
+    )
 
 
 def cross_section_rz(
@@ -222,21 +240,31 @@ def fieldline_deviation(
     theta0 = 2.0 * np.pi * (np.arange(n_lines) + 0.5) / n_lines
     r0, z0 = lcfs_rz(wout, theta0, np.zeros(n_lines))
 
-    r_lo, r_hi = float(r_sec.min()), float(r_sec.max())
-    z_hi = float(np.abs(z_sec).max())
+    # The tracing box is the extent of the whole surface (the axis of an nfp = 1
+    # configuration can wander by more than the major radius) plus a margin.
+    tt, zz = np.meshgrid(
+        np.linspace(0.0, 2.0 * np.pi, 64, endpoint=False),
+        np.linspace(0.0, 2.0 * np.pi / nfp, 32, endpoint=False),
+        indexing="ij",
+    )
+    r_all, z_all = lcfs_rz(wout, tt.ravel(), zz.ravel())
     stopping = [
-        ToroidalTransitStoppingCriterion(n_turns, True),
-        MinRStoppingCriterion(max(r_lo - 3.0 * a_minor, 1e-3)),
-        MaxRStoppingCriterion(r_hi + 3.0 * a_minor),
-        MinZStoppingCriterion(-(z_hi + 3.0 * a_minor)),
-        MaxZStoppingCriterion(z_hi + 3.0 * a_minor),
+        ToroidalTransitStoppingCriterion(n_turns, False),
+        MinRStoppingCriterion(max(float(r_all.min()) - 3.0 * a_minor, 1e-3)),
+        MaxRStoppingCriterion(float(r_all.max()) + 3.0 * a_minor),
+        MinZStoppingCriterion(float(z_all.min()) - 3.0 * a_minor),
+        MaxZStoppingCriterion(float(z_all.max()) + 3.0 * a_minor),
     ]
+    # SIMSOPT integrates dx/dt = B, so t is arc length divided by |B|; the
+    # transit criterion ends the trace, tmax is only a safety net.
+    bs.set_points(np.stack([r0, np.zeros(n_lines), z0], axis=1))
+    b_min = max(float(np.linalg.norm(bs.B(), axis=1).min()), 1e-3)
     t0 = time.time()
     tys, hits = compute_fieldlines(
         bs,
         list(r0),
         list(z0),
-        tmax=4.0 * np.pi * r_major * (n_turns + 1),
+        tmax=8.0 * np.pi * r_major * (n_turns + 1) / b_min,
         tol=tol,
         phis=[0.0],
         stopping_criteria=stopping,

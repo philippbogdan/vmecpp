@@ -26,7 +26,7 @@ from .cases import (
     serial_path,
 )
 from .report import build_comparison, build_report
-from .runner import run_matrix, worker_main
+from .runner import retrace, run_matrix, worker_main
 
 
 def _add_manifest_arg(parser: argparse.ArgumentParser) -> None:
@@ -94,6 +94,19 @@ def cmd_run(args) -> int:
     return 0
 
 
+def cmd_retrace(args) -> int:
+    n = retrace(
+        Path(args.results),
+        n_lines=args.trace_lines,
+        n_turns=args.trace_turns,
+        tol=args.trace_tol,
+        only_missing=args.only_missing,
+        cache_dir=args.cache_dir,
+    )
+    print(f"retraced {n} records")  # noqa: T201
+    return 0
+
+
 def cmd_worker(args) -> int:
     return worker_main(args.spec, args.out)
 
@@ -150,6 +163,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--trace-turns", type=int, default=100)
     p.add_argument("--trace-tol", type=float, default=1e-9)
     p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser(
+        "retrace", help="recompute field-line metrics from stored boundaries"
+    )
+    p.add_argument("--results", required=True)
+    p.add_argument("--trace-lines", type=int, default=8)
+    p.add_argument("--trace-turns", type=int, default=100)
+    p.add_argument("--trace-tol", type=float, default=1e-9)
+    p.add_argument("--only-missing", action="store_true")
+    p.set_defaults(func=cmd_retrace)
 
     p = sub.add_parser("worker", help=argparse.SUPPRESS)
     p.add_argument("spec")

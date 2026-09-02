@@ -141,7 +141,7 @@ FIELDS: dict[str, FieldSpec] = {
     ),
     "f1280": FieldSpec("f1280", 101, 0.4, 1280, description="bench default"),
     "f1280w": FieldSpec(
-        "f1280w", 151, 1.0, 1280, description="wide box for finite-beta regimes"
+        "f1280w", 121, 1.0, 1280, description="wide box for finite-beta regimes"
     ),
     "f2560": FieldSpec("f2560", 201, 0.4, 2560, description="high fidelity"),
 }
