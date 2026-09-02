@@ -240,9 +240,14 @@ def run_worker(spec: JobSpec) -> list[dict]:
         "extcur": float(case.extcur[0]),
         "n_coils": len(case.coils),
         "n_base_coils": len(case.base_coils),
-        "exact_field_check": metrics.exact_field_check(case),
-        **metrics.mgrid_floor(case, table, level.nzeta, bs),
     }
+    try:
+        case_info["exact_field_check"] = metrics.exact_field_check(case)
+        case_info.update(metrics.mgrid_floor(case, table, level.nzeta, bs))
+    except Exception:  # noqa: BLE001
+        case_info["case_metrics_error"] = _first_line(
+            traceback.format_exc().splitlines()[-1]
+        )
     t_case_metrics = time.time() - t0
 
     results: list[dict] = []
@@ -532,13 +537,25 @@ def run_matrix(
     trace_tol: float = 1e-9,
     cache_dir: Path | None = None,
     run_name: str = "",
+    redo: tuple[str, ...] = (),
     log=print,
 ) -> None:
     out_dir = Path(out_dir)
     jobs_dir = out_dir / "jobs"
     jobs_dir.mkdir(parents=True, exist_ok=True)
     results_path = out_dir / "results.jsonl"
-    done_keys = {r["key"] for r in load_results(out_dir)}
+    existing = load_results(out_dir)
+    if redo and existing:
+        # Drop the records of the classes to redo before they are re-run. Only
+        # safe while no other run is appending to this ledger.
+        kept = [r for r in existing if r.get("status") not in redo]
+        tmp = results_path.with_suffix(".jsonl.tmp")
+        with open(tmp, "w") as f:
+            f.writelines(json.dumps(rec, default=_json_default) + "\n" for rec in kept)
+        tmp.replace(results_path)
+        log(f"dropped {len(existing) - len(kept)} records with status in {redo}")
+        existing = kept
+    done_keys = {r["key"] for r in existing}
 
     meta_path = out_dir / "meta.json"
     meta = {

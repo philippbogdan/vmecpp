@@ -309,6 +309,16 @@ def fieldline_deviation(
     }
 
 
+def _safe_cross_section(surface, phi_fraction: float, n_theta: int):
+    """SIMSOPT's cross_section fails for surfaces whose cylindrical angle is not
+    monotonic along the toroidal parameter (strongly non-axisymmetric nfp = 1
+    shapes); return None in that case so callers can report NaN instead."""
+    try:
+        return surface.cross_section(phi_fraction, thetas=n_theta)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def quasr_boundary_comparison(
     wout, case: QuasrCase, n_phi: int = 6, n_theta: int = 1024
 ) -> dict[str, float]:
@@ -325,7 +335,9 @@ def quasr_boundary_comparison(
     mx = 0.0
     for k in range(n_phi):
         phi_fraction = 0.5 * k / (n_phi * case.nfp)
-        sec = case.boundary.cross_section(phi_fraction, thetas=n_theta)
+        sec = _safe_cross_section(case.boundary, phi_fraction, n_theta)
+        if sec is None:
+            continue
         quasr = np.stack([np.hypot(sec[:, 0], sec[:, 1]), sec[:, 2]], axis=1)
         r, z = cross_section_rz(wout, 2.0 * np.pi * phi_fraction, n_theta)
         vmec = np.stack([r, z], axis=1)
@@ -336,8 +348,8 @@ def quasr_boundary_comparison(
         mx = max(mx, float(d.max()))
     quasr_volume = abs(float(case.boundary.volume()))
     return {
-        "quasr_dist_rms": float(np.mean(rms)),
-        "quasr_dist_max": mx,
+        "quasr_dist_rms": float(np.mean(rms)) if rms else float("nan"),
+        "quasr_dist_max": mx if rms else float("nan"),
         "volume_ratio_quasr": float(abs(wout.volume) / quasr_volume),
     }
 
@@ -374,7 +386,9 @@ def mgrid_floor(
     mags: list[np.ndarray] = []
     for k in range(nphi):
         phi = k * (2.0 * np.pi / case.nfp) / nphi
-        sec = case.boundary.cross_section(phi / (2.0 * np.pi), thetas=200)
+        sec = _safe_cross_section(case.boundary, phi / (2.0 * np.pi), 200)
+        if sec is None:
+            continue
         rr = np.hypot(sec[:, 0], sec[:, 1])
         zz = sec[:, 2]
         pp = np.arctan2(sec[:, 1], sec[:, 0])
@@ -399,6 +413,13 @@ def mgrid_floor(
         )
         errs.append(np.linalg.norm(interp - exact, axis=1))
         mags.append(np.linalg.norm(exact, axis=1))
+    if not errs:
+        nan = float("nan")
+        return {
+            "mgrid_floor_rms": nan,
+            "mgrid_floor_max": nan,
+            "mgrid_cell_over_a": nan,
+        }
     err = np.concatenate(errs)
     mag = np.concatenate(mags)
     return {

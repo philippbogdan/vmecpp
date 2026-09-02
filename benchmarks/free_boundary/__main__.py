@@ -90,6 +90,7 @@ def cmd_run(args) -> int:
         trace_tol=args.trace_tol,
         cache_dir=args.cache_dir,
         run_name=args.name or "",
+        redo=tuple(args.redo.split(",")) if args.redo else (),
     )
     return 0
 
@@ -162,6 +163,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--trace-lines", type=int, default=8)
     p.add_argument("--trace-turns", type=int, default=100)
     p.add_argument("--trace-tol", type=float, default=1e-9)
+    p.add_argument(
+        "--redo", default=None, help="comma-separated statuses to drop and re-run"
+    )
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser(

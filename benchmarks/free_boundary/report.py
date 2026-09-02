@@ -136,7 +136,9 @@ def load_ledgers(results_dirs: list[Path]) -> pd.DataFrame:
                     records.append(rec)
     if not records:
         return pd.DataFrame()
+    lcfs = [rec.pop("lcfs", None) for rec in records]
     df = pd.json_normalize(records, sep=".")
+    df["lcfs"] = lcfs
     df["group"] = df["status"].map(GROUP_OF_CLASS).fillna("aborted")
     if "log.vacuum_on_iters" in df:
         df["vacuum_on_iter"] = df["log.vacuum_on_iters"].map(
@@ -243,7 +245,7 @@ def fig_outcomes(df: pd.DataFrame, out: Path) -> str | None:
     regimes = [r for r in REGIME_ORDER if r in set(base["regime"])]
     if not regimes:
         return None
-    fig, ax = plt.subplots(figsize=(7.5, 0.6 * len(regimes) + 1.2))
+    fig, ax = plt.subplots(figsize=(7.5, 0.6 * len(regimes) + 1.8))
     for i, regime in enumerate(regimes):
         sub = base[base["regime"] == regime]
         n = len(sub)
@@ -302,16 +304,16 @@ def fig_outcome_map(df: pd.DataFrame, out: Path) -> str | None:
             s = sub[sub["group"] == g]
             if s.empty:
                 continue
+            style = {"edgecolor": SURFACE, "linewidth": 0.6} if g != "aborted" else {}
             ax.scatter(
                 s["coil_dist_over_a"],
                 s["aspect_ratio"],
                 s=18,
                 marker=GROUP_MARKER[g],
                 color=GROUP_COLOUR[g],
-                edgecolor=SURFACE if g != "aborted" else GROUP_COLOUR[g],
-                linewidth=0.6,
                 label=f"{g} ({len(s)})",
                 alpha=0.9,
+                **style,
             )
         ax.set_xscale("log")
         ax.set_xlabel("coil-surface distance / a")
