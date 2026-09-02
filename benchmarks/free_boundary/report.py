@@ -482,8 +482,18 @@ def fig_accuracy(df: pd.DataFrame, out: Path) -> str | None:
     return path.name
 
 
+def _ladder_cases(df: pd.DataFrame) -> pd.DataFrame:
+    """Vacuum runs of the ladder subset only (reruns of other cases at ladder
+    levels, such as the initial-Jacobian rerun, must not enter the ladders)."""
+    sub = df[df["regime"] == "vacuum"]
+    if "ladder" in sub:
+        sub = sub[sub["ladder"].fillna(False).astype(bool)]
+    return sub
+
+
 def _ladder_panel(ax, df, levels, xvals, metric, xlabel, title, floor=True, ylog=True):
-    sub = df[(df["regime"] == "vacuum") & df["level"].isin(levels)]
+    sub = _ladder_cases(df)
+    sub = sub[sub["level"].isin(levels)]
     if sub.empty or metric not in sub:
         ax.axis("off")
         return False
@@ -639,9 +649,8 @@ def fig_ladders(df: pd.DataFrame, out: Path) -> str | None:
 def fig_field_ladder(df: pd.DataFrame, out: Path) -> str | None:
     have = set(df["field"])
     fields = [f for f in ("f160", "f1280", "f2560") if f in have]
-    sub = df[
-        (df["regime"] == "vacuum") & (df["level"] == "m8") & df["field"].isin(fields)
-    ]
+    sub = _ladder_cases(df)
+    sub = sub[(sub["level"] == "m8") & sub["field"].isin(fields)]
     if len(fields) < 2 or sub.empty:
         return None
     fig, axes = plt.subplots(1, 2, figsize=(9, 3.6))
@@ -984,7 +993,7 @@ def table_ladder(df: pd.DataFrame) -> str:
     ladder_ids = (
         set(df.loc[df["level"] != "base", "case_id"])
         if "ladder" not in df
-        else set(df.loc[df["ladder"].astype(bool), "case_id"])
+        else set(df.loc[df["ladder"].fillna(False).astype(bool), "case_id"])
     )
     vac = df[
         (df["regime"] == "vacuum")
@@ -1097,6 +1106,72 @@ def table_finite_beta(df: pd.DataFrame) -> str:
             )
         rows.append(row)
     return md_table(pd.DataFrame(rows), index=False) if rows else ""
+
+
+def table_control(df: pd.DataFrame) -> str:
+    """Free-boundary outcome against the fixed-boundary control, per case."""
+    base = df[df["level"] == "base"]
+    free = base[base["regime"] == "vacuum"].set_index("case_id")
+    fixed = base[base["regime"] == "vacuum_fixed"].set_index("case_id")
+    common = free.index.intersection(fixed.index)
+    if len(common) == 0:
+        return ""
+    rows = []
+    for cls in CLASSES:
+        ids = [c for c in common if free.loc[c, "status"] == cls]
+        if not ids:
+            continue
+        fx = fixed.loc[ids, "status"]
+        rows.append(
+            {
+                "free-boundary class": cls,
+                "cases": len(ids),
+                "fixed-boundary converged": int((fx == "converged").sum()),
+                "fixed-boundary bad_jacobian": int((fx == "bad_jacobian").sum()),
+                "fixed-boundary other failure": int(
+                    ((fx != "converged") & (fx != "bad_jacobian")).sum()
+                ),
+            }
+        )
+    return md_table(pd.DataFrame(rows), index=False)
+
+
+def table_badjac_rerun(df: pd.DataFrame) -> str:
+    """Outcome at higher Fourier resolution of the cases that failed the
+    initial Jacobian at the base level."""
+    base = df[(df["level"] == "base") & (df["regime"] == "vacuum")]
+    ids = set(base.loc[base["status"] == "bad_jacobian", "case_id"])
+    levels = [lv for lv in ("m8", "m10") if lv in set(df["level"])]
+    sub = df[
+        (df["regime"] == "vacuum") & df["case_id"].isin(ids) & df["level"].isin(levels)
+    ]
+    if sub.empty:
+        return ""
+    rows = []
+    for lv in levels:
+        s_lv = sub[sub["level"] == lv]
+        counts = s_lv["status"].value_counts()
+        rows.append(
+            {
+                "level": lv,
+                "cases rerun": len(s_lv),
+                "converged": int(counts.get("converged", 0)),
+                "bad_jacobian": int(counts.get("bad_jacobian", 0)),
+                "jacobian_75_times": int(counts.get("jacobian_75_times", 0)),
+                "other": int(
+                    len(s_lv)
+                    - counts.get("converged", 0)
+                    - counts.get("bad_jacobian", 0)
+                    - counts.get("jacobian_75_times", 0)
+                ),
+                "B.n RMS median of converged": float(
+                    s_lv.loc[s_lv["converged"], "bn_rms"].median()
+                )
+                if s_lv["converged"].any()
+                else np.nan,
+            }
+        )
+    return md_table(pd.DataFrame(rows), index=False)
 
 
 def table_failures(df: pd.DataFrame, regime: str = "vacuum", n: int = 40) -> str:
@@ -1244,7 +1319,23 @@ def build_report(
     if figures["residuals"]:
         a(f"![residual histories]({figures['residuals']})")
         a("")
-    a("Non-converged vacuum runs at the base level:")
+    control = table_control(df)
+    if control:
+        a(
+            "Fixed-boundary control: the same case with the QUASR surface imposed. A free-boundary failure whose fixed-boundary twin also fails is a boundary-representation or initial-guess problem, not a free-boundary one."
+        )
+        a("")
+        a(control)
+        a("")
+    rerun = table_badjac_rerun(df)
+    if rerun:
+        a(
+            "Initial-Jacobian failures rerun at higher Fourier resolution (same radial sequence as the ladder, ns = 51):"
+        )
+        a("")
+        a(rerun)
+        a("")
+    a("Non-converged vacuum runs at the base level (first 40):")
     a("")
     a(table_failures(df, "vacuum"))
     a("")
