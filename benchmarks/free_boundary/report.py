@@ -282,9 +282,9 @@ def fig_outcomes(df: pd.DataFrame, out: Path) -> str | None:
     ax.set_xlabel("share of cases [%]")
     ax.grid(axis="y", visible=False)
     handles = [plt.Rectangle((0, 0), 1, 1, color=GROUP_COLOUR[g]) for g in GROUPS]
-    ax.legend(handles, GROUPS, ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.9))
     ax.set_title("Outcome of the free-boundary solve per regime (base level)")
-    fig.tight_layout()
+    fig.legend(handles, GROUPS, ncol=4, loc="lower center", frameon=False)
+    fig.tight_layout(rect=(0, 0.12, 1, 1))
     path = out / "fig_outcomes.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)

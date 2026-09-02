@@ -110,6 +110,28 @@ def cross_section_rz(
     return lcfs_rz(wout, theta, np.full(n_theta, phi))
 
 
+def section_centroid(
+    wout, phi: np.ndarray, n_theta: int = 256
+) -> tuple[np.ndarray, np.ndarray]:
+    """Area centroid of the boundary cross-section at each toroidal angle: a
+    reference point inside the section for winding counts that does not depend
+    on the axis Fourier convention."""
+    theta = np.linspace(0.0, 2.0 * np.pi, n_theta, endpoint=False)
+    r_c = np.empty(len(phi))
+    z_c = np.empty(len(phi))
+    for i, p in enumerate(phi):
+        r, z = lcfs_rz(wout, theta, np.full(n_theta, p))
+        r2, z2 = np.roll(r, -1), np.roll(z, -1)
+        cross = r * z2 - r2 * z
+        area = 0.5 * np.sum(cross)
+        if abs(area) < 1e-14:
+            r_c[i], z_c[i] = r.mean(), z.mean()
+        else:
+            r_c[i] = np.sum((r + r2) * cross) / (6.0 * area)
+            z_c[i] = np.sum((z + z2) * cross) / (6.0 * area)
+    return r_c, z_c
+
+
 def magnetic_axis_rz(wout, phi: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     n = np.arange(len(wout.raxis_cc))
     arg = np.outer(phi, n * wout.nfp)
@@ -135,6 +157,23 @@ def exact_field(case: QuasrCase, n_points: int | None = None) -> BiotSavart:
     curves = [resampled_curve(c.curve, n_points) for c in case.base_coils]
     currents = [c.current for c in case.base_coils]
     return BiotSavart(coils_via_symmetries(curves, currents, case.nfp, True))
+
+
+def reference_field(
+    case: QuasrCase, n_points: int = 640, tolerance: float = 1e-8
+) -> tuple[BiotSavart, float, int]:
+    """The ground-truth field for the metrics, with its self-check.
+
+    The stored coil curves carry 160 quadrature points, which is spectrally
+    accurate except very close to a coil; the re-quadratured rebuild agrees
+    with a further doubling to machine precision. When the two differ by more
+    than ``tolerance`` on the QUASR boundary the rebuild is used. Returns the
+    field, the maximum relative difference, and the point count used.
+    """
+    check = exact_field_check(case, n_points)
+    if check > tolerance:
+        return exact_field(case, n_points), check, n_points
+    return exact_field(case), check, len(case.base_coils[0].curve.quadpoints)
 
 
 def exact_field_check(case: QuasrCase, n_points: int = 640) -> float:
@@ -259,14 +298,30 @@ def fieldline_deviation(
     # transit criterion ends the trace, tmax is only a safety net.
     bs.set_points(np.stack([r0, np.zeros(n_lines), z0], axis=1))
     b_min = max(float(np.linalg.norm(bs.B(), axis=1).min()), 1e-3)
+    # Centroid of the section on a fine toroidal grid, interpolated at the hits.
+    phi_grid = np.linspace(0.0, 2.0 * np.pi, 256, endpoint=False)
+    rc_grid, zc_grid = section_centroid(wout, phi_grid)
+
+    def centroid_at(phi_values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        pg = np.append(phi_grid, 2.0 * np.pi)
+        return (
+            np.interp(phi_values, pg, np.append(rc_grid, rc_grid[0])),
+            np.interp(phi_values, pg, np.append(zc_grid, zc_grid[0])),
+        )
+
     t0 = time.time()
+    # Crossings are recorded on n_planes toroidal planes: plane 0 gives the
+    # geometric deviation, all planes give a sampling of the line fine enough
+    # (less than pi of poloidal angle between samples at any iota met here)
+    # to count its winding about the magnetic axis.
+    n_planes = 64
     tys, hits = compute_fieldlines(
         bs,
         list(r0),
         list(z0),
         tmax=8.0 * np.pi * r_major * (n_turns + 1) / b_min,
         tol=tol,
-        phis=[0.0],
+        phis=list(2.0 * np.pi * np.arange(n_planes) / n_planes),
         stopping_criteria=stopping,
     )
     seconds = time.time() - t0
@@ -274,7 +329,7 @@ def fieldline_deviation(
     devs: list[np.ndarray] = []
     iotas: list[float] = []
     lost = 0
-    for ty, raw_hits in zip(tys, hits, strict=True):
+    for raw_hits in hits:
         hit = np.asarray(raw_hits)
         crossings = hit[hit[:, 1] == 0] if len(hit) else hit
         if len(crossings) < 0.9 * n_turns:
@@ -288,10 +343,11 @@ def fieldline_deviation(
             lost += 1
             continue
         devs.append(d)
-        # Rotational transform from the winding about the VMEC++ axis.
-        xyz = np.asarray(ty)[:, 1:4]
+        # Rotational transform from the winding about the section centroid,
+        # sampled at every plane crossing in time order.
+        xyz = hit[np.argsort(hit[:, 0])][:, 2:5]
         phi = np.unwrap(np.arctan2(xyz[:, 1], xyz[:, 0]))
-        r_ax, z_ax = magnetic_axis_rz(wout, phi)
+        r_ax, z_ax = centroid_at(np.mod(phi, 2.0 * np.pi))
         theta = np.unwrap(
             np.arctan2(xyz[:, 2] - z_ax, np.hypot(xyz[:, 0], xyz[:, 1]) - r_ax)
         )

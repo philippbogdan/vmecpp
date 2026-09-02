@@ -232,7 +232,7 @@ def run_worker(spec: JobSpec) -> list[dict]:
     set_omp_threads(1)
 
     t0 = time.time()
-    bs = metrics.exact_field(case)
+    bs, check, ref_points = metrics.reference_field(case)
     case_info = {
         "phiedge": case.phiedge,
         "b_char": case.b_char,
@@ -240,9 +240,10 @@ def run_worker(spec: JobSpec) -> list[dict]:
         "extcur": float(case.extcur[0]),
         "n_coils": len(case.coils),
         "n_base_coils": len(case.base_coils),
+        "exact_field_check": check,
+        "reference_coil_points": ref_points,
     }
     try:
-        case_info["exact_field_check"] = metrics.exact_field_check(case)
         case_info.update(metrics.mgrid_floor(case, table, level.nzeta, bs))
     except Exception:  # noqa: BLE001
         case_info["case_metrics_error"] = _first_line(
@@ -461,9 +462,9 @@ def retrace(
             continue
         case_id = int(rec["case_id"])
         if case_id not in fields:
-            fields[case_id] = metrics.exact_field(
+            fields[case_id] = metrics.reference_field(
                 case_lib.load_case(case_id, cache_dir)
-            )
+            )[0]
         rec.update(
             metrics.fieldline_deviation(
                 fields[case_id],
