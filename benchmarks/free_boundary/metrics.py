@@ -315,7 +315,7 @@ def fieldline_deviation(
     # (less than pi of poloidal angle between samples at any iota met here)
     # to count its winding about the magnetic axis.
     n_planes = 64
-    tys, hits = compute_fieldlines(
+    _, hits = compute_fieldlines(
         bs,
         list(r0),
         list(z0),
