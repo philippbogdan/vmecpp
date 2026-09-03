@@ -300,8 +300,15 @@ def fig_outcome_map(df: pd.DataFrame, out: Path) -> str | None:
     if not regimes or "coil_dist_over_a" not in base:
         return None
     n = len(regimes)
-    fig, axes = plt.subplots(1, n, figsize=(3.6 * n, 3.6), sharey=True, squeeze=False)
-    for ax, regime in zip(axes[0], regimes, strict=True):
+    ncol = min(3, n)
+    nrow = int(np.ceil(n / ncol))
+    fig, axes = plt.subplots(
+        nrow, ncol, figsize=(3.9 * ncol, 3.6 * nrow), sharey=True, squeeze=False
+    )
+    flat = [ax for row in axes for ax in row]
+    for ax in flat[n:]:
+        ax.axis("off")
+    for ax, regime in zip(flat[:n], regimes, strict=True):
         sub = base[base["regime"] == regime]
         for g in GROUPS:
             s = sub[sub["group"] == g]
@@ -322,7 +329,8 @@ def fig_outcome_map(df: pd.DataFrame, out: Path) -> str | None:
         ax.set_xlabel("coil-surface distance / a")
         ax.set_title(regime)
         ax.legend(loc="upper left", markerscale=1.1)
-    axes[0][0].set_ylabel("aspect ratio")
+    for row in axes:
+        row[0].set_ylabel("aspect ratio")
     fig.suptitle(
         "Where the solve succeeds: each dot is one QUASR case",
         y=1.02,
