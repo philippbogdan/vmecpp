@@ -1303,10 +1303,12 @@ def table_condensed_all(df: pd.DataFrame) -> str:
     b = base.loc[common]
     c = cond.loc[common]
     lines = [
-        f"Cases run at both levels: {len(common)}. Converged at base: {int(b['converged'].sum())}; "
-        f"with the condensed boundary: {int(c['converged'].sum())}. "
-        f"Newly converging: {int((~b['converged'] & c['converged']).sum())}; "
-        f"newly failing: {int((b['converged'] & ~c['converged']).sum())}.",
+        (
+            f"Cases run at both levels: {len(common)}. Converged at base: {int(b['converged'].sum())}; "
+            f"with the condensed boundary: {int(c['converged'].sum())}. "
+            f"Newly converging: {int((~b['converged'] & c['converged']).sum())}; "
+            f"newly failing: {int((b['converged'] & ~c['converged']).sum())}."
+        ),
         "",
     ]
     both = common[b["converged"].to_numpy() & c["converged"].to_numpy()]
@@ -1415,8 +1417,14 @@ def build_report(
     a("")
     a("## Setup")
     a("")
+    versions = sorted(
+        {str(v) for v in df.get("vmecpp_version", pd.Series(dtype=object)).dropna()}
+    )
     a(
-        f"* Solver: VMEC++ at `{meta0.get('repo_describe', '?')}` (Python package version {meta0.get('vmecpp_version')}), SIMSOPT {meta0.get('simsopt_version')}, Python {meta0.get('python')}, {meta0.get('platform')}."
+        f"* Solver: VMEC++ package version {meta0.get('vmecpp_version')} "
+        f"(per-record versions where recorded: {versions or 'none'}); bench code at "
+        f"`{meta0.get('repo_describe', '?')}`; SIMSOPT {meta0.get('simsopt_version')}, "
+        f"Python {meta0.get('python')}, {meta0.get('platform')}."
     )
     a(
         f"* Cases: {n_cases} QUASR configurations from the manifest ({int((manifest['subset'] == 'reference').sum())} reference, {int((manifest['subset'] == 'main').sum())} stratified), {int(manifest['ladder'].sum())} on the ladders."

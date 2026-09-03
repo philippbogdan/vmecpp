@@ -59,9 +59,14 @@ def lcfs_rz(wout, theta: np.ndarray, zeta: np.ndarray) -> tuple[np.ndarray, np.n
 
 
 def lcfs_surface(
-    wout, n_phi_per_period: int = 16, n_theta: int = 64
+    wout, n_phi_per_period: int = 48, n_theta: int = 128
 ) -> SurfaceRZFourier:
-    """The VMEC++ boundary as a SIMSOPT surface over the full torus."""
+    """The VMEC++ boundary as a SIMSOPT surface over the full torus.
+
+    The quadrature has to resolve the residual normal field, which lives at
+    the truncation modes of the boundary and above; 128 x 48 per period is
+    converged to well under a percent for mpol, ntor up to 12.
+    """
     nfp = int(wout.nfp)
     xm = np.asarray(wout.xm, dtype=int)
     xn = np.asarray(wout.xn, dtype=int)
@@ -196,7 +201,8 @@ def exact_field_check(case: QuasrCase, n_points: int = 640) -> float:
 
 
 def normal_field_error(bs: BiotSavart, surface) -> dict[str, float]:
-    """Area-weighted RMS and maximum of B . n / |B| on a surface."""
+    """Area-weighted RMS and maximum of the pointwise ratio B . n / |B| on a
+    surface."""
     normal = surface.normal().reshape(-1, 3)
     area = np.linalg.norm(normal, axis=1)
     unit_normal = normal / area[:, None]
@@ -206,13 +212,14 @@ def normal_field_error(bs: BiotSavart, surface) -> dict[str, float]:
     bn = np.sum(b * unit_normal, axis=1)
     bmag = np.linalg.norm(b, axis=1)
     w = area / area.sum()
+    ratio = bn / bmag
     return {
-        "bn_rms": float(np.sqrt(np.sum(w * bn**2) / np.sum(w * bmag**2))),
+        "bn_rms": float(np.sqrt(np.sum(w * ratio**2))),
         "bn_max": float(np.max(np.abs(bn) / bmag)),
     }
 
 
-def b2_mismatch(wout, bs: BiotSavart, n_theta: int = 64, n_zeta_per_period: int = 16):
+def b2_mismatch(wout, bs: BiotSavart, n_theta: int = 128, n_zeta_per_period: int = 48):
     """|B|^2 on the plasma side of the boundary (VMEC++, extrapolated from the
     two outermost half-grid surfaces) against the coil field.
 
@@ -531,14 +538,16 @@ def mgrid_floor(
         return {
             "mgrid_floor_rms": nan,
             "mgrid_floor_max": nan,
-            "mgrid_cell_over_a": nan,
+            "mgrid_cell_over_half_extent": nan,
         }
     err = np.concatenate(errs)
     mag = np.concatenate(mags)
     return {
         "mgrid_floor_rms": float(np.sqrt(np.mean(err**2)) / np.sqrt(np.mean(mag**2))),
         "mgrid_floor_max": float(err.max() / mag.max()),
-        "mgrid_cell_over_a": float(
+        # R-grid cell over half the radial extent of the boundary (the mgrid
+        # box is that extent plus its margin on each side).
+        "mgrid_cell_over_half_extent": float(
             (r[1] - r[0]) / (0.5 * (case.extent[1] - case.extent[0]))
         ),
     }

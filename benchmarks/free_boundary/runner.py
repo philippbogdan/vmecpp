@@ -16,6 +16,7 @@ from __future__ import annotations
 import concurrent.futures
 import contextlib
 import ctypes
+import importlib.metadata
 import json
 import os
 import platform
@@ -426,8 +427,24 @@ def run_worker(spec: JobSpec) -> list[dict]:
 def worker_main(spec_path: str, out_path: str) -> int:
     spec = JobSpec(**json.loads(Path(spec_path).read_text()))
     results = run_worker(spec)
-    Path(out_path).write_text(json.dumps(results, default=_json_default))
+    version = solver_metadata().get("vmecpp_version")
+    for rec in results:
+        rec["vmecpp_version"] = version
+    Path(out_path).write_text(json.dumps(_sanitize(results), default=_json_default))
     return 0
+
+
+def _sanitize(obj):
+    """Replace non-finite floats by None so the ledger is strict JSON."""
+    if isinstance(obj, float):
+        return obj if np.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize(v) for v in obj]
+    if isinstance(obj, np.floating):
+        return float(obj) if np.isfinite(obj) else None
+    return obj
 
 
 def _json_default(obj):
@@ -514,7 +531,53 @@ def retrace(
     tmp = path.with_suffix(".jsonl.tmp")
     with open(tmp, "w") as f:
         for rec in records:
-            f.write(json.dumps(rec, default=_json_default) + "\n")
+            f.write(json.dumps(_sanitize(rec), default=_json_default) + "\n")
+    tmp.replace(path)
+    return n_done
+
+
+def remeasure(
+    results_dir: Path,
+    *,
+    cache_dir: Path | None = None,
+    log=print,
+) -> int:
+    """Recompute the normal-field and QUASR-distance metrics of every converged
+    free-boundary vacuum record from its stored boundary (no solver run).
+
+    Used after a change to a metric's definition or quadrature. |B|^2 needs
+    the field coefficients and is not recomputed.
+    """
+    results_dir = Path(results_dir)
+    path = results_dir / "results.jsonl"
+    records = load_results(results_dir)
+    set_omp_threads(1)
+    fields: dict[int, tuple] = {}
+    n_done = 0
+    for rec in records:
+        if (
+            rec.get("regime") != "vacuum"
+            or not rec.get("converged")
+            or "lcfs" not in rec
+        ):
+            continue
+        case_id = int(rec["case_id"])
+        if case_id not in fields:
+            case = case_lib.load_case(case_id, cache_dir)
+            fields[case_id] = (metrics.reference_field(case)[0], case)
+        bs, case = fields[case_id]
+        wout = metrics.lcfs_namespace(rec)
+        surface = metrics.lcfs_surface(wout)
+        old = rec.get("bn_rms")
+        rec.update(metrics.normal_field_error(bs, surface))
+        rec.update(metrics.coil_distance(surface, case))
+        rec.update(metrics.quasr_boundary_comparison(wout, case))
+        n_done += 1
+        log(f"remeasured {rec['key']}: bn_rms {old} -> {rec['bn_rms']:.3e}")
+    tmp = path.with_suffix(".jsonl.tmp")
+    with open(tmp, "w") as f:
+        for rec in records:
+            f.write(json.dumps(_sanitize(rec), default=_json_default) + "\n")
     tmp.replace(path)
     return n_done
 
@@ -525,8 +588,14 @@ def retrace(
 
 
 def solver_metadata() -> dict:
+    try:
+        vmecpp_version = importlib.metadata.version("vmecpp")
+    except importlib.metadata.PackageNotFoundError:
+        vmecpp_version = None
     meta = {
-        "vmecpp_version": getattr(vmecpp, "__version__", None),
+        # The installed package version (setuptools_scm: the solver's source
+        # commit), as opposed to repo_describe, the checkout of the bench code.
+        "vmecpp_version": vmecpp_version,
         "vmecpp_file": getattr(vmecpp, "__file__", None),
         "simsopt_version": getattr(simsopt, "__version__", None),
         "python": sys.version.split()[0],
@@ -662,7 +731,7 @@ def run_matrix(
         nonlocal n_done
         with lock, open(results_path, "a") as f:
             for rec in records:
-                f.write(json.dumps(rec, default=_json_default) + "\n")
+                f.write(json.dumps(_sanitize(rec), default=_json_default) + "\n")
                 counts[rec["status"]] = counts.get(rec["status"], 0) + 1
             n_done += 1
         elapsed = time.time() - t_start

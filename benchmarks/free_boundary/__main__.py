@@ -26,7 +26,7 @@ from .cases import (
     serial_path,
 )
 from .report import build_comparison, build_report
-from .runner import retrace, run_matrix, worker_main
+from .runner import remeasure, retrace, run_matrix, worker_main
 
 
 def _add_manifest_arg(parser: argparse.ArgumentParser) -> None:
@@ -110,12 +110,22 @@ def cmd_retrace(args) -> int:
     return 0
 
 
+def cmd_remeasure(args) -> int:
+    n = remeasure(Path(args.results), cache_dir=args.cache_dir)
+    print(f"remeasured {n} records")  # noqa: T201
+    return 0
+
+
 def cmd_worker(args) -> int:
     return worker_main(args.spec, args.out)
 
 
 def cmd_report(args) -> int:
-    build_report([Path(p) for p in args.results], args.manifest, args.out)
+    try:
+        build_report([Path(p) for p in args.results], args.manifest, args.out)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)  # noqa: T201
+        return 2
     return 0
 
 
@@ -185,6 +195,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--ids", default=None, help="comma-separated QUASR IDs")
     p.set_defaults(func=cmd_retrace)
+
+    p = sub.add_parser(
+        "remeasure", help="recompute normal-field metrics from stored boundaries"
+    )
+    p.add_argument("--results", required=True)
+    p.set_defaults(func=cmd_remeasure)
 
     p = sub.add_parser("worker", help=argparse.SUPPRESS)
     p.add_argument("spec")
