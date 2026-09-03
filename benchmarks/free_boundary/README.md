@@ -72,8 +72,11 @@ runs uses the force-residual history of the last stage.
 
 ## Accuracy metrics (vacuum, converged)
 
-* `bn_rms`, `bn_max`: B . n / |B| of the exact coil field on the VMEC++ boundary,
-  area-weighted. Independent of the mgrid table.
+* `bn_rms`, `bn_max`: area-weighted RMS and maximum of the pointwise ratio
+  B . n / |B| of the exact coil field on the VMEC++ boundary, on a 128 x 48
+  (per period) grid, which resolves the residual at the boundary's truncation
+  modes. Independent of the mgrid table. An independent SIMSOPT evaluation
+  reproduces the ledger values to four digits.
 * `fl_dev_rms`, `fl_dev_max`, `fl_lost_fraction`, `fl_iota`: field lines of the
   coil field traced from the boundary; distance of their phi = 0 crossings to
   the boundary in minor radii (lines that stray by more than half a minor
@@ -93,6 +96,11 @@ runs uses the force-residual history of the last stage.
   and Z).
 * `exact_field_check`: the Biot-Savart reference against a re-quadratured
   rebuild of the coil set from its base coils; validates the ground truth.
+  When the two differ by more than 1e-8 the rebuilt (640-point) coils are
+  used as the reference (`reference_coil_points` records which).
+* Convergence is decided from `ier_flag`, the final `ns` and the three force
+  residuals against `ftol`, never from the `reason` string of the wout (which
+  reads "convergence was not reached" for code 0, converged or not).
 
 ## Running
 
