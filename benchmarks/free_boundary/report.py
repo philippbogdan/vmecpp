@@ -964,7 +964,8 @@ def table_accuracy(df: pd.DataFrame) -> str:
     if "fl_lost_quasr" in vac:
         rows.append(
             {
-                "metric": "fraction of lines lost from the QUASR surface itself",
+                "metric": "fraction of lines lost from the QUASR surface itself "
+                "(computed for the cases with lost lines)",
                 **_percentiles(vac["fl_lost_quasr"]),
             }
         )
@@ -983,6 +984,36 @@ def table_accuracy(df: pd.DataFrame) -> str:
             {"metric": "edge iota: |traced - VMEC++| / |VMEC++|", **_percentiles(rel)}
         )
     return md_table(pd.DataFrame(rows), index=False)
+
+
+def confinement_summary(df: pd.DataFrame) -> str:
+    """One sentence on where lost field lines come from."""
+    vac = df[(df["regime"] == "vacuum") & (df["level"] == "base") & df["converged"]]
+    if "fl_lost_fraction" not in vac:
+        return ""
+    lost = vac[
+        (pd.to_numeric(vac["fl_lost_fraction"], errors="coerce").fillna(0) > 0)
+        | ~np.isfinite(pd.to_numeric(vac.get("fl_dev_rms"), errors="coerce"))
+    ]
+    if lost.empty:
+        return "No converged case lost a traced field line."
+    half = lost[
+        (pd.to_numeric(lost["fl_lost_fraction"], errors="coerce").fillna(1) >= 0.5)
+    ]
+    text = (
+        f"{len(lost)} of the {len(vac)} converged vacuum cases lose at least one "
+        f"of the traced field lines ({len(half)} lose half or more)."
+    )
+    if "fl_lost_quasr" in lost:
+        q = pd.to_numeric(lost["fl_lost_quasr"], errors="coerce")
+        known = q.notna().sum()
+        text += (
+            f" Of the {known} checked, the same tracing started on the QUASR surface "
+            f"itself loses lines in {int((q > 0).sum())}: there the coil field's last "
+            "closed flux surface lies inside the QUASR boundary and the lost lines "
+            "say nothing about the solver."
+        )
+    return text
 
 
 def table_ladder(df: pd.DataFrame) -> str:
@@ -1487,6 +1518,8 @@ def build_report(
     )
     a("")
     a(table_accuracy(df))
+    a("")
+    a(confinement_summary(df))
     a("")
     if figures["accuracy"]:
         a(f"![accuracy]({figures['accuracy']})")
