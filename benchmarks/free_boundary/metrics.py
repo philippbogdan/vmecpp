@@ -375,6 +375,63 @@ def _safe_cross_section(surface, phi_fraction: float, n_theta: int):
         return None
 
 
+def quasr_surface_confinement(
+    bs: BiotSavart,
+    case: QuasrCase,
+    a_minor: float,
+    n_lines: int = 8,
+    n_turns: int = 30,
+    tol: float = 1e-9,
+) -> dict[str, float]:
+    """Fraction of field lines started on the QUASR outermost surface that
+    leave it by more than half a minor radius within ``n_turns`` turns.
+
+    A configuration whose own surface does not confine the coil field's lines
+    has its last closed flux surface inside the QUASR boundary (an optimisation
+    residual of the database); "lost" lines from the VMEC++ boundary of such a
+    case say nothing about the solver.
+    """
+    sec = _safe_cross_section(case.boundary, 0.0, 2048)
+    if sec is None:
+        return {"fl_lost_quasr": float("nan")}
+    polyline = np.stack([np.hypot(sec[:, 0], sec[:, 1]), sec[:, 2]], axis=1)
+    starts = _safe_cross_section(case.boundary, 0.0, n_lines)
+    if starts is None:
+        return {"fl_lost_quasr": float("nan")}
+    r0 = np.hypot(starts[:, 0], starts[:, 1])
+    z0 = starts[:, 2]
+    r_lo, r_hi = float(polyline[:, 0].min()), float(polyline[:, 0].max())
+    z_hi = float(np.abs(polyline[:, 1]).max())
+    stopping = [
+        ToroidalTransitStoppingCriterion(n_turns, False),
+        MinRStoppingCriterion(max(r_lo - 3.0 * a_minor, 1e-3)),
+        MaxRStoppingCriterion(r_hi + 3.0 * a_minor),
+        MinZStoppingCriterion(-(z_hi + 3.0 * a_minor)),
+        MaxZStoppingCriterion(z_hi + 3.0 * a_minor),
+    ]
+    bs.set_points(np.stack([r0, np.zeros(n_lines), z0], axis=1))
+    b_min = max(float(np.linalg.norm(bs.B(), axis=1).min()), 1e-3)
+    _, hits = compute_fieldlines(
+        bs,
+        list(r0),
+        list(z0),
+        tmax=8.0 * np.pi * case.r_char * (n_turns + 1) / b_min,
+        tol=tol,
+        phis=[0.0],
+        stopping_criteria=stopping,
+    )
+    lost = 0
+    for raw in hits:
+        hit = np.asarray(raw)
+        if len(hit) < 0.9 * n_turns:
+            lost += 1
+            continue
+        pts = np.stack([np.hypot(hit[:, 2], hit[:, 3]), hit[:, 4]], axis=1)
+        if _point_to_polyline_distance(pts, polyline).max() / a_minor > 0.5:
+            lost += 1
+    return {"fl_lost_quasr": lost / n_lines}
+
+
 def quasr_boundary_comparison(
     wout, case: QuasrCase, n_phi: int = 6, n_theta: int = 1024
 ) -> dict[str, float]:

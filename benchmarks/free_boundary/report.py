@@ -139,6 +139,9 @@ def load_ledgers(results_dirs: list[Path]) -> pd.DataFrame:
     lcfs = [rec.pop("lcfs", None) for rec in records]
     df = pd.json_normalize(records, sep=".")
     df["lcfs"] = lcfs
+    # The same experiment can appear in several ledgers (a rerun directory
+    # overlapping the ladder); the first listed directory wins.
+    df = df.drop_duplicates(subset="key", keep="first").reset_index(drop=True)
     df["group"] = df["status"].map(GROUP_OF_CLASS).fillna("aborted")
     if "log.vacuum_on_iters" in df:
         df["vacuum_on_iter"] = df["log.vacuum_on_iters"].map(

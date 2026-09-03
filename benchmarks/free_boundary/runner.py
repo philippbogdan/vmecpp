@@ -384,6 +384,15 @@ def run_worker(spec: JobSpec) -> list[dict]:
                                     tol=spec.trace_tol,
                                 )
                             )
+                            rec.update(
+                                metrics.quasr_surface_confinement(
+                                    bs,
+                                    case,
+                                    float(wout.Aminor_p),
+                                    n_lines=spec.trace_lines,
+                                    tol=spec.trace_tol,
+                                )
+                            )
                 except Exception:  # noqa: BLE001
                     rec["metrics_error"] = _first_line(
                         traceback.format_exc().splitlines()[-1]
@@ -449,7 +458,7 @@ def retrace(
     path = results_dir / "results.jsonl"
     records = load_results(results_dir)
     set_omp_threads(1)
-    fields: dict[int, object] = {}
+    fields: dict[int, tuple] = {}
     n_done = 0
     for rec in records:
         if (
@@ -462,16 +471,21 @@ def retrace(
             continue
         case_id = int(rec["case_id"])
         if case_id not in fields:
-            fields[case_id] = metrics.reference_field(
-                case_lib.load_case(case_id, cache_dir)
-            )[0]
+            case = case_lib.load_case(case_id, cache_dir)
+            fields[case_id] = (metrics.reference_field(case)[0], case)
+        bs, case = fields[case_id]
         rec.update(
             metrics.fieldline_deviation(
-                fields[case_id],
+                bs,
                 metrics.lcfs_namespace(rec),
                 n_lines=n_lines,
                 n_turns=n_turns,
                 tol=tol,
+            )
+        )
+        rec.update(
+            metrics.quasr_surface_confinement(
+                bs, case, float(rec["Aminor_p"]), n_lines=n_lines, tol=tol
             )
         )
         n_done += 1
