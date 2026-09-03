@@ -274,7 +274,17 @@ def run_worker(spec: JobSpec) -> list[dict]:
             "nzeta": level.nzeta,
             "niter_budget": level.niter,
         }
+        t0 = time.time()
         vmec_input = case_lib.make_input(case, regime, level)
+        rec["t_input"] = time.time() - t0
+        if level.condense:
+            data = case.condensed[level.condense_epsilon][1]
+            rec["condense"] = {
+                "spectral_width_reduction": data.get("spectral_width_reduction"),
+                "max_RZ_error": data.get("max_RZ_error"),
+                "initial_objective": data.get("initial_objective"),
+                "final_objective": data.get("final_objective"),
+            }
         rec["pres_scale"] = float(vmec_input.pres_scale)
         rec["curtor"] = float(vmec_input.curtor)
         rec["target_beta"] = case_lib.target_beta(case, regime)

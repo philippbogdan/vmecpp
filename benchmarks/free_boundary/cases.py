@@ -21,6 +21,8 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+import dataclasses
+
 import numpy as np
 import pandas as pd
 from simsopt._core import load as simsopt_load
@@ -265,6 +267,7 @@ class QuasrCase:
     b_char: float  # characteristic |B| on the boundary cross-section [T]
     extent: tuple[float, float, float, float]  # R_min, R_max, Z_min, Z_max
     meta: dict  # the manifest row (QUASR index values), possibly empty
+    condensed: dict = dataclasses.field(default_factory=dict)  # epsilon -> surface
 
     @property
     def stellsym(self) -> bool:
@@ -396,6 +399,17 @@ def build_response_table(
 # ---------------------------------------------------------------------------
 
 
+def condensed_boundary(case: QuasrCase, epsilon: float):
+    """The QUASR boundary with its poloidal angle reparametrised by SIMSOPT's
+    spectral condensation (shape preserved to ``epsilon`` minor radii),
+    computed once per case and cached on it."""
+    if epsilon not in case.condensed:
+        rz = case.boundary.to_RZFourier()
+        surface, data = rz.condense_spectrum(epsilon=epsilon, verbose=False)
+        case.condensed[epsilon] = (surface, data)
+    return case.condensed[epsilon][0]
+
+
 def boundary_coefficients(
     surface, mpol: int, ntor: int
 ) -> tuple[np.ndarray, np.ndarray, float]:
@@ -447,9 +461,12 @@ def make_input(
     """
     if free_boundary is None:
         free_boundary = regime.free_boundary
-    rbc, zbs, r_axis_guess = boundary_coefficients(
-        case.boundary, level.mpol, level.ntor
+    surface = (
+        condensed_boundary(case, level.condense_epsilon)
+        if level.condense
+        else case.boundary
     )
+    rbc, zbs, r_axis_guess = boundary_coefficients(surface, level.mpol, level.ntor)
     ns_array = np.asarray(level.ns_array, dtype=np.int64)
 
     vmec_input = vmecpp.VmecInput.default()

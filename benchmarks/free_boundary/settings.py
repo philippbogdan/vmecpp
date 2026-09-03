@@ -88,6 +88,11 @@ class Level:
     nvacskip: int = 6
     delt: float = 1.0
     tcon0: float = 1.0
+    # Reparametrise the poloidal angle of the initial boundary by SIMSOPT's
+    # spectral condensation before truncating it to (mpol, ntor). The shape
+    # is preserved to condense_epsilon minor radii; only theta changes.
+    condense: bool = False
+    condense_epsilon: float = 1e-3
     description: str = ""
 
     @property
@@ -118,6 +123,16 @@ LEVELS: dict[str, Level] = {
     # Flow-control variants of the base level.
     "nvac1": Level("nvac1", 6, 6, (8, 16, 31), 24, nvacskip=1),
     "delt05": Level("delt05", 6, 6, (8, 16, 31), 24, delt=0.5),
+    # Base level with a spectrally condensed initial boundary.
+    "base_cond": Level(
+        "base_cond",
+        6,
+        6,
+        (8, 16, 31),
+        24,
+        condense=True,
+        description="base with a spectrally condensed initial boundary",
+    ),
 }
 
 

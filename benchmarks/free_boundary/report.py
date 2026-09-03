@@ -956,6 +956,13 @@ def table_accuracy(df: pd.DataFrame) -> str:
     if "bn_rms" in vac and "mgrid_floor_rms" in vac:
         ratio = vac["bn_rms"] / vac["mgrid_floor_rms"]
         rows.append({"metric": "B.n RMS / floor", **_percentiles(ratio)})
+    if "fl_lost_quasr" in vac:
+        rows.append(
+            {
+                "metric": "fraction of lines lost from the QUASR surface itself",
+                **_percentiles(vac["fl_lost_quasr"]),
+            }
+        )
     if "quasr_iota_edge" in vac and "iota_edge" in vac:
         rel = (vac["iota_edge"].abs() - vac["quasr_iota_edge"].abs()).abs() / vac[
             "quasr_iota_edge"
@@ -1119,9 +1126,14 @@ def table_finite_beta(df: pd.DataFrame) -> str:
     base = df[df["level"] == "base"]
     vac = base[(base["regime"] == "vacuum") & base["converged"]].set_index("case_id")
     rows = []
-    for regime in [
-        r for r in REGIME_ORDER if r != "vacuum" and r in set(base["regime"])
-    ]:
+    beta_regimes = [
+        r
+        for r in REGIME_ORDER
+        if r in set(base["regime"])
+        and r in REGIMES
+        and (REGIMES[r].target_beta > 0 or REGIMES[r].shift_target is not None)
+    ]
+    for regime in beta_regimes:
         s = base[(base["regime"] == regime)]
         c = s[s["converged"]].set_index("case_id")
         common = c.index.intersection(vac.index)
@@ -1132,8 +1144,11 @@ def table_finite_beta(df: pd.DataFrame) -> str:
         row = {
             "regime": regime,
             "converged": f"{len(c)}/{len(s)}",
-            "target beta median": float(s["target_beta"].median())
+            "target beta median (all cases)": float(s["target_beta"].median())
             if "target_beta" in s
+            else np.nan,
+            "target beta median (converged)": float(c["target_beta"].median())
+            if "target_beta" in c and len(c)
             else np.nan,
             "achieved / target beta (median)": float(beta_ratio.median())
             if len(c)
@@ -1190,7 +1205,10 @@ def table_badjac_rerun(df: pd.DataFrame) -> str:
     ids = set(base.loc[base["status"] == "bad_jacobian", "case_id"])
     levels = [lv for lv in ("m8", "m10") if lv in set(df["level"])]
     sub = df[
-        (df["regime"] == "vacuum") & df["case_id"].isin(ids) & df["level"].isin(levels)
+        (df["regime"] == "vacuum")
+        & df["case_id"].isin(ids)
+        & df["level"].isin(levels)
+        & (df["field"] == "f1280")
     ]
     if sub.empty:
         return ""
@@ -1221,7 +1239,12 @@ def table_badjac_rerun(df: pd.DataFrame) -> str:
     return md_table(pd.DataFrame(rows), index=False)
 
 
-def table_failures(df: pd.DataFrame, regime: str = "vacuum", n: int = 40) -> str:
+def table_failures(
+    df: pd.DataFrame,
+    regime: str = "vacuum",
+    per_class: int = 4,
+    csv_path: Path | None = None,
+) -> str:
     base = df[(df["level"] == "base") & (df["regime"] == regime) & ~df["converged"]]
     if base.empty:
         return "none"
@@ -1239,11 +1262,18 @@ def table_failures(df: pd.DataFrame, regime: str = "vacuum", n: int = 40) -> str
         "fsqz": "fsqz",
         "restart_counts.BAD_JACOBIAN": "Jacobian resets",
         "log.n_convergence_problem": "delt resets",
-        "lcfs_coil_min_dist": "final coil dist [m]",
         "exception": "message",
     }
     have = [c for c in cols if c in base]
-    t = base.sort_values(["status", "case_id"])[have].head(n).rename(columns=cols)
+    full = base.sort_values(["status", "case_id"])[have].rename(columns=cols)
+    if csv_path is not None:
+        full.to_csv(csv_path, index=False)
+    t = (
+        base.sort_values(["status", "case_id"])
+        .groupby("status", sort=False)
+        .head(per_class)[have]
+        .rename(columns=cols)
+    )
     if "message" in t:
         t["message"] = t["message"].map(
             lambda v: textwrap.shorten(str(v), 80) if isinstance(v, str) else ""
@@ -1303,8 +1333,9 @@ def build_report(
         f"* Runs in the ledger: {len(df)} across regimes {sorted(set(df['regime']))}, levels {sorted(set(df['level']))}, field specs {sorted(set(df['field']))}."
     )
     for m in metas:
+        started = min([*m.get("previous_runs", []), m.get("started")], key=str)
         a(
-            f"* `{m.get('run_name')}`: started {m.get('started')}, finished {m.get('finished', 'running')}, workers x threads = {m.get('workers')} x {m.get('threads')}, tracing {m.get('trace_lines')} lines x {m.get('trace_turns')} turns."
+            f"* `{m.get('run_name')}`: started {started}, last finished {m.get('finished', 'running')}, workers x threads = {m.get('workers')} x {m.get('threads')}, tracing {m.get('trace_lines')} lines x {m.get('trace_turns')} turns."
         )
     a("")
     a(
@@ -1382,9 +1413,12 @@ def build_report(
         a("")
         a(rerun)
         a("")
-    a("Non-converged vacuum runs at the base level (first 40):")
+    a(
+        "Non-converged vacuum runs at the base level, up to four per class "
+        "(the full list is in `failures_vacuum.csv`):"
+    )
     a("")
-    a(table_failures(df, "vacuum"))
+    a(table_failures(df, "vacuum", csv_path=out_dir / "failures_vacuum.csv"))
     a("")
     a("## Accuracy (vacuum, converged, base level)")
     a("")
