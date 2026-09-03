@@ -12,6 +12,7 @@ initial guess and as an independent reference; the coils define the problem.
 
 from __future__ import annotations
 
+import dataclasses
 import gzip
 import json
 import os
@@ -20,8 +21,6 @@ import typing
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-
-import dataclasses
 
 import numpy as np
 import pandas as pd
