@@ -16,6 +16,7 @@ from __future__ import annotations
 import concurrent.futures
 import contextlib
 import ctypes
+import gzip
 import importlib.metadata
 import json
 import os
@@ -616,11 +617,22 @@ def solver_metadata() -> dict:
     return meta
 
 
+def ledger_path(results_dir: Path) -> Path | None:
+    """The ledger of a results directory: ``results.jsonl`` if present, else the
+    compressed ``results.jsonl.gz`` that shipped ledgers are stored as."""
+    for name in ("results.jsonl", "results.jsonl.gz"):
+        path = Path(results_dir) / name
+        if path.exists():
+            return path
+    return None
+
+
 def load_results(results_dir: Path) -> list[dict]:
-    path = Path(results_dir) / "results.jsonl"
-    if not path.exists():
+    path = ledger_path(results_dir)
+    if path is None:
         return []
-    with open(path) as f:
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 

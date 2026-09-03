@@ -122,7 +122,12 @@ def cmd_worker(args) -> int:
 
 def cmd_report(args) -> int:
     try:
-        build_report([Path(p) for p in args.results], args.manifest, args.out)
+        build_report(
+            [Path(p) for p in args.results],
+            args.manifest,
+            args.out,
+            ledger_csv=args.ledger_csv,
+        )
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)  # noqa: T201
         return 2
@@ -211,6 +216,9 @@ def main(argv: list[str] | None = None) -> int:
     _add_manifest_arg(p)
     p.add_argument("--results", nargs="+", required=True)
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument(
+        "--ledger-csv", action="store_true", help="also write a flat ledger.csv"
+    )
     p.set_defaults(func=cmd_report)
 
     p = sub.add_parser("compare", help="diff two result ledgers of the same matrix")

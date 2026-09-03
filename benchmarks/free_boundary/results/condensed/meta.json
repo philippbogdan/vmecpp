@@ -1,0 +1,433 @@
+{
+  "run_name": "condensed",
+  "started": "2026-09-03 09:17:04",
+  "levels": [
+    "base_cond"
+  ],
+  "fields": [
+    "f1280"
+  ],
+  "regimes": [
+    "vacuum",
+    "vacuum_fixed"
+  ],
+  "workers": 3,
+  "threads": 3,
+  "timeout": 1800.0,
+  "trace": true,
+  "trace_lines": 8,
+  "trace_turns": 50,
+  "trace_tol": 1e-09,
+  "n_cases": 53,
+  "presets": {
+    "regimes": {
+      "vacuum": {
+        "name": "vacuum",
+        "target_beta": 0.0,
+        "current_fraction": 0.0,
+        "pressure_shape": [
+          1.0,
+          -1.0
+        ],
+        "current_shape": [
+          1.0,
+          -1.0
+        ],
+        "shift_target": null,
+        "beta_cap": 0.04,
+        "free_boundary": true,
+        "description": "zero pressure, zero net toroidal current"
+      },
+      "beta1": {
+        "name": "beta1",
+        "target_beta": 0.01,
+        "current_fraction": 0.0,
+        "pressure_shape": [
+          1.0,
+          -1.0
+        ],
+        "current_shape": [
+          1.0,
+          -1.0
+        ],
+        "shift_target": null,
+        "beta_cap": 0.04,
+        "free_boundary": true,
+        "description": "about 1 percent volume-averaged beta, no current"
+      },
+      "beta2_current": {
+        "name": "beta2_current",
+        "target_beta": 0.02,
+        "current_fraction": 0.02,
+        "pressure_shape": [
+          1.0,
+          -1.0
+        ],
+        "current_shape": [
+          1.0,
+          -1.0
+        ],
+        "shift_target": null,
+        "beta_cap": 0.04,
+        "free_boundary": true,
+        "description": "about 2 percent beta plus a net toroidal current"
+      },
+      "vacuum_fixed": {
+        "name": "vacuum_fixed",
+        "target_beta": 0.0,
+        "current_fraction": 0.0,
+        "pressure_shape": [
+          1.0,
+          -1.0
+        ],
+        "current_shape": [
+          1.0,
+          -1.0
+        ],
+        "shift_target": null,
+        "beta_cap": 0.04,
+        "free_boundary": false,
+        "description": "vacuum, fixed boundary on the truncated QUASR surface (control)"
+      },
+      "beta_scaled": {
+        "name": "beta_scaled",
+        "target_beta": 0.0,
+        "current_fraction": 0.0,
+        "pressure_shape": [
+          1.0,
+          -1.0
+        ],
+        "current_shape": [
+          1.0,
+          -1.0
+        ],
+        "shift_target": 0.2,
+        "beta_cap": 0.04,
+        "free_boundary": true,
+        "description": "beta scaled per case to a nominal Shafranov shift of 0.2 a"
+      }
+    },
+    "levels": {
+      "base": {
+        "name": "base",
+        "mpol": 6,
+        "ntor": 6,
+        "ns_array": [
+          8,
+          16,
+          31
+        ],
+        "nzeta": 24,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": "tests/test_free_boundary_quasr.py"
+      },
+      "m6": {
+        "name": "m6",
+        "mpol": 6,
+        "ntor": 6,
+        "ns_array": [
+          8,
+          16,
+          31,
+          51
+        ],
+        "nzeta": 24,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": "Fourier ladder"
+      },
+      "m8": {
+        "name": "m8",
+        "mpol": 8,
+        "ntor": 8,
+        "ns_array": [
+          8,
+          16,
+          31,
+          51
+        ],
+        "nzeta": 32,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": "Fourier ladder"
+      },
+      "m10": {
+        "name": "m10",
+        "mpol": 10,
+        "ntor": 10,
+        "ns_array": [
+          8,
+          16,
+          31,
+          51
+        ],
+        "nzeta": 40,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": "Fourier ladder"
+      },
+      "m12": {
+        "name": "m12",
+        "mpol": 12,
+        "ntor": 12,
+        "ns_array": [
+          8,
+          16,
+          31,
+          51
+        ],
+        "nzeta": 48,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": "Fourier ladder"
+      },
+      "ns31": {
+        "name": "ns31",
+        "mpol": 8,
+        "ntor": 8,
+        "ns_array": [
+          8,
+          16,
+          31
+        ],
+        "nzeta": 32,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": "radial ladder"
+      },
+      "ns71": {
+        "name": "ns71",
+        "mpol": 8,
+        "ntor": 8,
+        "ns_array": [
+          8,
+          16,
+          31,
+          51,
+          71
+        ],
+        "nzeta": 32,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": "radial ladder"
+      },
+      "ns101": {
+        "name": "ns101",
+        "mpol": 8,
+        "ntor": 8,
+        "ns_array": [
+          8,
+          16,
+          31,
+          51,
+          71,
+          101
+        ],
+        "nzeta": 32,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": "radial ladder"
+      },
+      "ftol8": {
+        "name": "ftol8",
+        "mpol": 8,
+        "ntor": 8,
+        "ns_array": [
+          8,
+          16,
+          31,
+          51
+        ],
+        "nzeta": 32,
+        "ftol": 1e-08,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": ""
+      },
+      "ftol11": {
+        "name": "ftol11",
+        "mpol": 8,
+        "ntor": 8,
+        "ns_array": [
+          8,
+          16,
+          31,
+          51
+        ],
+        "nzeta": 32,
+        "ftol": 1e-11,
+        "niter": 4000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": ""
+      },
+      "ftol13": {
+        "name": "ftol13",
+        "mpol": 8,
+        "ntor": 8,
+        "ns_array": [
+          8,
+          16,
+          31,
+          51
+        ],
+        "nzeta": 32,
+        "ftol": 1e-13,
+        "niter": 8000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": ""
+      },
+      "nvac1": {
+        "name": "nvac1",
+        "mpol": 6,
+        "ntor": 6,
+        "ns_array": [
+          8,
+          16,
+          31
+        ],
+        "nzeta": 24,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 1,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": ""
+      },
+      "delt05": {
+        "name": "delt05",
+        "mpol": 6,
+        "ntor": 6,
+        "ns_array": [
+          8,
+          16,
+          31
+        ],
+        "nzeta": 24,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 0.5,
+        "tcon0": 1.0,
+        "condense": false,
+        "condense_epsilon": 0.001,
+        "description": ""
+      },
+      "base_cond": {
+        "name": "base_cond",
+        "mpol": 6,
+        "ntor": 6,
+        "ns_array": [
+          8,
+          16,
+          31
+        ],
+        "nzeta": 24,
+        "ftol": 1e-09,
+        "niter": 2000,
+        "nvacskip": 6,
+        "delt": 1.0,
+        "tcon0": 1.0,
+        "condense": true,
+        "condense_epsilon": 0.001,
+        "description": "base with a spectrally condensed initial boundary"
+      }
+    },
+    "fields": {
+      "f160": {
+        "name": "f160",
+        "points_rz": 101,
+        "margin": 0.4,
+        "coil_points": 160,
+        "description": "coil curves as stored by QUASR"
+      },
+      "f1280": {
+        "name": "f1280",
+        "points_rz": 101,
+        "margin": 0.4,
+        "coil_points": 1280,
+        "description": "bench default"
+      },
+      "f1280w": {
+        "name": "f1280w",
+        "points_rz": 121,
+        "margin": 1.0,
+        "coil_points": 1280,
+        "description": "wide box for finite-beta regimes"
+      },
+      "f2560": {
+        "name": "f2560",
+        "points_rz": 201,
+        "margin": 0.4,
+        "coil_points": 2560,
+        "description": "high fidelity"
+      }
+    }
+  },
+  "vmecpp_version": "0.7.4.dev33+g91ab6b351",
+  "simsopt_version": "1.11.1",
+  "python": "3.14.5",
+  "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "cpu_count": 10,
+  "repo_describe": "v0.7.3-52-g527f55a",
+  "previous_runs": [
+    "2026-09-03 08:07:31"
+  ],
+  "finished": "2026-09-03 09:55:00",
+  "note": "the 53 cases that failed the initial Jacobian at the base level; a run over all cases was started and stopped before any further result"
+}

@@ -24,6 +24,7 @@ import pandas as pd
 
 from .cases import DEFAULT_MANIFEST, load_case, load_manifest
 from .classify import CLASSES, DESCRIPTIONS
+from .runner import load_results
 from .settings import FIELDS, LEVELS, REGIMES
 
 # ---------------------------------------------------------------------------
@@ -125,15 +126,9 @@ def _style() -> None:
 def load_ledgers(results_dirs: list[Path]) -> pd.DataFrame:
     records: list[dict] = []
     for d in results_dirs:
-        path = Path(d) / "results.jsonl"
-        if not path.exists():
-            continue
-        with open(path) as f:
-            for line in f:
-                if line.strip():
-                    rec = json.loads(line)
-                    rec["results_dir"] = str(d)
-                    records.append(rec)
+        for rec in load_results(Path(d)):
+            rec["results_dir"] = str(d)
+            records.append(rec)
     if not records:
         return pd.DataFrame()
     lcfs = [rec.pop("lcfs", None) for rec in records]
@@ -202,9 +197,13 @@ def md_table(df: pd.DataFrame, floatfmt: str = "{:.3g}", index: bool = True) -> 
             if np.isnan(v):
                 return ""
             return floatfmt.format(v)
-        return str(v)
+        # A bar inside a cell would end the cell in GitHub-flavoured markdown.
+        return str(v).replace("|", "\\|")
 
-    lines = ["| " + " | ".join(str(c) for c in cols) + " |", "|" + "---|" * len(cols)]
+    lines = [
+        "| " + " | ".join(str(c).replace("|", "\\|") for c in cols) + " |",
+        "|" + "---|" * len(cols),
+    ]
     for _, row in frame.iterrows():
         lines.append("| " + " | ".join(fmt(row[c]) for c in cols) + " |")
     return "\n".join(lines)
@@ -1381,7 +1380,11 @@ def table_failures(
 
 
 def build_report(
-    results_dirs: list[Path], manifest_path: Path | None, out_dir: Path
+    results_dirs: list[Path],
+    manifest_path: Path | None,
+    out_dir: Path,
+    *,
+    ledger_csv: bool = False,
 ) -> Path:
     _style()
     out_dir = Path(out_dir)
@@ -1413,7 +1416,7 @@ def build_report(
     a = lines.append
     a("# VMEC++ free-boundary bench: results")
     a("")
-    a(f"Generated from {', '.join(str(d) for d in results_dirs)}.")
+    a(f"Generated from the ledgers {', '.join(f'`{d}`' for d in results_dirs)}.")
     a("")
     a("## Setup")
     a("")
@@ -1422,8 +1425,8 @@ def build_report(
     )
     a(
         f"* Solver: VMEC++ package version {meta0.get('vmecpp_version')} "
-        f"(per-record versions where recorded: {versions or 'none'}); bench code at "
-        f"`{meta0.get('repo_describe', '?')}`; SIMSOPT {meta0.get('simsopt_version')}, "
+        f"(per-record versions where recorded: {versions or 'none'}); "
+        f"SIMSOPT {meta0.get('simsopt_version')}, "
         f"Python {meta0.get('python')}, {meta0.get('platform')}."
     )
     a(
@@ -1432,10 +1435,22 @@ def build_report(
     a(
         f"* Runs in the ledger: {len(df)} across regimes {sorted(set(df['regime']))}, levels {sorted(set(df['level']))}, field specs {sorted(set(df['field']))}."
     )
+    turns = sorted(
+        {int(t) for t in pd.to_numeric(df.get("fl_turns"), errors="coerce").dropna()}
+    )
+    a(
+        f"* Field-line tracing in the records: {turns or 'none'} toroidal turns "
+        "(the value stored with each record is the one used)."
+    )
     for m in metas:
         started = min([*m.get("previous_runs", []), m.get("started")], key=str)
+        note = m.get("vmecpp_version_note")
         a(
-            f"* `{m.get('run_name')}`: started {started}, last finished {m.get('finished', 'running')}, workers x threads = {m.get('workers')} x {m.get('threads')}, tracing {m.get('trace_lines')} lines x {m.get('trace_turns')} turns."
+            f"* `{m.get('run_name')}`: started {started}, last finished "
+            f"{m.get('finished', 'running')}, workers x threads = {m.get('workers')} x "
+            f"{m.get('threads')}, VMEC++ package {m.get('vmecpp_version')}"
+            + (f" ({note})" if note else "")
+            + "."
         )
     a("")
     a(
@@ -1596,9 +1611,10 @@ def build_report(
     )
     report_path = out_dir / "report.md"
     report_path.write_text("\n".join(lines))
-    df.drop(columns=[c for c in ("fsq_trace", "lcfs") if c in df]).to_csv(
-        out_dir / "ledger.csv", index=False
-    )
+    if ledger_csv:
+        df.drop(columns=[c for c in ("fsq_trace", "lcfs") if c in df]).to_csv(
+            out_dir / "ledger.csv", index=False
+        )
     return report_path
 
 

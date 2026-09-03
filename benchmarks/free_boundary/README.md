@@ -135,6 +135,14 @@ own log is captured per run and its markers (vacuum activation iteration,
 convergence-problem resets, grid overruns, per-stage iterations) are kept in
 the ledger.
 
+## Results of the first run
+
+`report/findings.md` reads the results of the full matrix on VMEC++ built from
+commit 91ab6b3: what converges, how the rest fails, how accurate the converged
+vacuum solutions are against the coil field, and how that changes with
+resolution. `report/report.md` holds the generated tables and figures, and
+`results/` the ledgers they were generated from (see `results/README.md`).
+
 ## Reading the numbers
 
 Every accuracy number should be read next to `mgrid_floor_rms` of the same run:
