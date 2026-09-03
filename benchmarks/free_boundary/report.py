@@ -1516,7 +1516,7 @@ def build_report(
         a("")
     condensed = table_condensed_all(df)
     if condensed:
-        a("Condensed initial boundary on every case run at both levels:")
+        a("Base level against the condensed initial boundary on the cases run at both:")
         a("")
         a(condensed)
         a("")
