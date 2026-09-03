@@ -105,6 +105,7 @@ def lcfs_namespace(record: dict) -> types.SimpleNamespace:
         zmns=np.asarray(lcfs["zmns"], dtype=float)[:, None],
         raxis_cc=np.asarray(lcfs["raxis_cc"], dtype=float),
         zaxis_cs=np.asarray(lcfs["zaxis_cs"], dtype=float),
+        volume=float(record.get("volume", float("nan"))),
     )
 
 
