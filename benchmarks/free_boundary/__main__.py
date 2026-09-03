@@ -102,6 +102,8 @@ def cmd_retrace(args) -> int:
         n_turns=args.trace_turns,
         tol=args.trace_tol,
         only_missing=args.only_missing,
+        only_confinement=args.only_confinement,
+        ids={int(i) for i in args.ids.split(",")} if args.ids else None,
         cache_dir=args.cache_dir,
     )
     print(f"retraced {n} records")  # noqa: T201
@@ -176,6 +178,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--trace-turns", type=int, default=100)
     p.add_argument("--trace-tol", type=float, default=1e-9)
     p.add_argument("--only-missing", action="store_true")
+    p.add_argument(
+        "--only-confinement",
+        action="store_true",
+        help="only compute fl_lost_quasr where it is missing",
+    )
+    p.add_argument("--ids", default=None, help="comma-separated QUASR IDs")
     p.set_defaults(func=cmd_retrace)
 
     p = sub.add_parser("worker", help=argparse.SUPPRESS)

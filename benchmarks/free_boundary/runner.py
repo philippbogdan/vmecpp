@@ -455,6 +455,8 @@ def retrace(
     n_turns: int = 100,
     tol: float = 1e-9,
     only_missing: bool = False,
+    only_confinement: bool = False,
+    ids: set[int] | None = None,
     cache_dir: Path | None = None,
     log=print,
 ) -> int:
@@ -480,19 +482,24 @@ def retrace(
         if only_missing and np.isfinite(rec.get("fl_dev_rms", np.nan)):
             continue
         case_id = int(rec["case_id"])
+        if ids is not None and case_id not in ids:
+            continue
+        if only_confinement and np.isfinite(rec.get("fl_lost_quasr", np.nan)):
+            continue
         if case_id not in fields:
             case = case_lib.load_case(case_id, cache_dir)
             fields[case_id] = (metrics.reference_field(case)[0], case)
         bs, case = fields[case_id]
-        rec.update(
-            metrics.fieldline_deviation(
-                bs,
-                metrics.lcfs_namespace(rec),
-                n_lines=n_lines,
-                n_turns=n_turns,
-                tol=tol,
+        if not only_confinement:
+            rec.update(
+                metrics.fieldline_deviation(
+                    bs,
+                    metrics.lcfs_namespace(rec),
+                    n_lines=n_lines,
+                    n_turns=n_turns,
+                    tol=tol,
+                )
             )
-        )
         rec.update(
             metrics.quasr_surface_confinement(
                 bs, case, float(rec["Aminor_p"]), n_lines=n_lines, tol=tol
@@ -500,7 +507,9 @@ def retrace(
         )
         n_done += 1
         log(
-            f"retraced {rec['key']}: dev rms {rec['fl_dev_rms']:.2e} a, lost {rec['fl_lost_fraction']:.2f}"
+            f"retraced {rec['key']}: dev rms {rec.get('fl_dev_rms', np.nan):.2e} a, "
+            f"lost {rec.get('fl_lost_fraction', np.nan):.2f}, "
+            f"lost from QUASR surface {rec.get('fl_lost_quasr', np.nan):.2f}"
         )
     tmp = path.with_suffix(".jsonl.tmp")
     with open(tmp, "w") as f:

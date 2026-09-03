@@ -1204,44 +1204,92 @@ def table_control(df: pd.DataFrame) -> str:
 
 
 def table_badjac_rerun(df: pd.DataFrame) -> str:
-    """Outcome at higher Fourier resolution of the cases that failed the
-    initial Jacobian at the base level."""
+    """Outcome of the cases that failed the initial Jacobian at the base level
+    when rerun at higher Fourier resolution or with a spectrally condensed
+    initial boundary, free-boundary and (where run) fixed-boundary."""
     base = df[(df["level"] == "base") & (df["regime"] == "vacuum")]
     ids = set(base.loc[base["status"] == "bad_jacobian", "case_id"])
-    levels = [lv for lv in ("m8", "m10") if lv in set(df["level"])]
+    levels = [lv for lv in ("m8", "m10", "base_cond") if lv in set(df["level"])]
     sub = df[
-        (df["regime"] == "vacuum")
-        & df["case_id"].isin(ids)
-        & df["level"].isin(levels)
-        & (df["field"] == "f1280")
+        df["case_id"].isin(ids) & df["level"].isin(levels) & (df["field"] == "f1280")
     ]
     if sub.empty:
         return ""
     rows = []
     for lv in levels:
-        s_lv = sub[sub["level"] == lv]
-        counts = s_lv["status"].value_counts()
-        rows.append(
-            {
-                "level": lv,
-                "cases rerun": len(s_lv),
-                "converged": int(counts.get("converged", 0)),
-                "bad_jacobian": int(counts.get("bad_jacobian", 0)),
-                "jacobian_75_times": int(counts.get("jacobian_75_times", 0)),
-                "other": int(
-                    len(s_lv)
-                    - counts.get("converged", 0)
-                    - counts.get("bad_jacobian", 0)
-                    - counts.get("jacobian_75_times", 0)
-                ),
-                "B.n RMS median of converged": float(
-                    s_lv.loc[s_lv["converged"], "bn_rms"].median()
-                )
-                if s_lv["converged"].any()
-                else np.nan,
-            }
-        )
+        free = sub[(sub["level"] == lv) & (sub["regime"] == "vacuum")]
+        fixed = sub[(sub["level"] == lv) & (sub["regime"] == "vacuum_fixed")]
+        counts = free["status"].value_counts()
+        row = {
+            "level": lv,
+            "what changes": LEVELS[lv].description or "",
+            "cases rerun": len(free),
+            "free-boundary converged": int(counts.get("converged", 0)),
+            "still bad_jacobian": int(counts.get("bad_jacobian", 0)),
+            "jacobian_75_times": int(counts.get("jacobian_75_times", 0)),
+            "other": int(
+                len(free)
+                - counts.get("converged", 0)
+                - counts.get("bad_jacobian", 0)
+                - counts.get("jacobian_75_times", 0)
+            ),
+            "fixed-boundary converged": f"{int(fixed['converged'].sum())}/{len(fixed)}"
+            if len(fixed)
+            else "",
+            "B.n RMS median of converged": float(
+                free.loc[free["converged"], "bn_rms"].median()
+            )
+            if free["converged"].any()
+            else np.nan,
+        }
+        if lv == "base_cond" and "condense.spectral_width_reduction" in free:
+            row["spectral width reduction (median)"] = float(
+                pd.to_numeric(
+                    free["condense.spectral_width_reduction"], errors="coerce"
+                ).median()
+            )
+        rows.append(row)
     return md_table(pd.DataFrame(rows), index=False)
+
+
+def table_condensed_all(df: pd.DataFrame) -> str:
+    """Base level against the condensed-boundary level on every case run at
+    both (vacuum, free boundary): status transitions and accuracy ratio."""
+    vac = df[(df["regime"] == "vacuum") & (df["field"] == "f1280")]
+    base = vac[vac["level"] == "base"].set_index("case_id")
+    cond = vac[vac["level"] == "base_cond"].set_index("case_id")
+    common = base.index.intersection(cond.index)
+    if len(common) < 10:
+        return ""
+    b = base.loc[common]
+    c = cond.loc[common]
+    lines = [
+        f"Cases run at both levels: {len(common)}. Converged at base: {int(b['converged'].sum())}; "
+        f"with the condensed boundary: {int(c['converged'].sum())}. "
+        f"Newly converging: {int((~b['converged'] & c['converged']).sum())}; "
+        f"newly failing: {int((b['converged'] & ~c['converged']).sum())}.",
+        "",
+    ]
+    both = common[b["converged"].to_numpy() & c["converged"].to_numpy()]
+    if len(both):
+        ratio_bn = (c.loc[both, "bn_rms"] / b.loc[both, "bn_rms"]).astype(float)
+        ratio_it = (c.loc[both, "itfsq_total"] / b.loc[both, "itfsq_total"]).astype(
+            float
+        )
+        lines.append(
+            f"On the {len(both)} cases converged at both: B.n RMS ratio condensed/base median "
+            f"{ratio_bn.median():.2f} (p10 {ratio_bn.quantile(0.1):.2f}, p90 {ratio_bn.quantile(0.9):.2f}); "
+            f"iterations ratio median {ratio_it.median():.2f}."
+        )
+        lines.append("")
+    cross = pd.crosstab(b["status"], c["status"])
+    lines += [
+        "Status transitions (rows: base, columns: condensed):",
+        "",
+        md_table(cross),
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def table_failures(
@@ -1413,10 +1461,17 @@ def build_report(
     rerun = table_badjac_rerun(df)
     if rerun:
         a(
-            "Initial-Jacobian failures rerun at higher Fourier resolution (same radial sequence as the ladder, ns = 51):"
+            "Initial-Jacobian failures rerun at higher Fourier resolution (m8, m10: "
+            "ns = 51) and with a spectrally condensed initial boundary (base_cond):"
         )
         a("")
         a(rerun)
+        a("")
+    condensed = table_condensed_all(df)
+    if condensed:
+        a("Condensed initial boundary on every case run at both levels:")
+        a("")
+        a(condensed)
         a("")
     a(
         "Non-converged vacuum runs at the base level, up to four per class "
