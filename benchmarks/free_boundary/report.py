@@ -778,8 +778,8 @@ def fig_flow_control(df: pd.DataFrame, out: Path) -> str | None:
             both = bool(b["converged"]) and bool(c["converged"])
             colour = SERIES[0] if both else STATUS["critical"]
             ax.scatter(
-                b["t_run"],
-                c["t_run"],
+                b["itfsq_total"],
+                c["itfsq_total"],
                 s=18,
                 color=colour,
                 edgecolor=SURFACE,
@@ -787,18 +787,20 @@ def fig_flow_control(df: pd.DataFrame, out: Path) -> str | None:
                 alpha=0.9,
             )
         lim = [
-            min(base["t_run"].min(), v["t_run"].min()) * 0.8,
-            max(base["t_run"].max(), v["t_run"].max()) * 1.2,
+            min(base["itfsq_total"].min(), v["itfsq_total"].min()) * 0.8,
+            max(base["itfsq_total"].max(), v["itfsq_total"].max()) * 1.2,
         ]
         ax.plot(lim, lim, color=MUTED, lw=0.8, ls=":")
         ax.set_xscale("log")
         ax.set_yscale("log")
-        ax.set_xlabel("wall time, base [s]")
-        ax.set_ylabel(f"wall time, {lv} [s]")
+        ax.set_xlabel("total iterations, base")
+        ax.set_ylabel(f"total iterations, {lv}")
         nb = int(base.loc[common, "converged"].sum())
         nv = int(v.loc[common, "converged"].sum())
         ax.set_title(
-            f"{lv}: {LEVELS[lv].description or 'flow-control variant'}\nconverged {nv}/{len(common)} (base {nb}/{len(common)}); red = not both converged",
+            f"{lv}: {LEVELS[lv].description or 'flow-control variant'}\n"
+            f"converged {nv}/{len(common)} (base {nb}/{len(common)}); "
+            "red = not both converged",
             fontsize=8,
         )
     fig.tight_layout()
@@ -865,8 +867,11 @@ def fig_examples(
                 label="VMEC++ free boundary" if k == 0 else None,
             )
         ax.set_aspect("equal")
+        dev = r.get("fl_dev_rms", np.nan)
+        dev_text = f"{dev:.1e} a" if np.isfinite(dev) else "lines lost"
         ax.set_title(
-            f"{label}: QUASR {int(r['case_id'])} (nfp={nfp})\nB.n/|B| RMS = {r['bn_rms']:.1e}, field-line dev = {r.get('fl_dev_rms', np.nan):.1e} a",
+            f"{label}: QUASR {int(r['case_id'])} (nfp={nfp})\n"
+            f"B.n/|B| RMS = {r['bn_rms']:.1e}, field-line dev = {dev_text}",
             fontsize=8,
         )
         ax.set_xlabel("R [m]")
@@ -1454,6 +1459,13 @@ def build_report(
             a(f"![field ladder]({figures['field']})")
             a("")
     a("## Speed (converged runs, base level)")
+    a("")
+    a(
+        "Wall times are laptop timings with three threads per run and three runs "
+        "at a time; ledgers were produced under different background load, so "
+        "iteration counts are the portable number and wall times are indicative "
+        "within one ledger only."
+    )
     a("")
     a(table_speed(df))
     a("")
